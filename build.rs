@@ -894,19 +894,22 @@ fn get_target_platform() -> String {
 }
 
 // /etc/os-release から Ubuntu バージョンを検出する
+//
+// prebuilt は Ubuntu のバージョンごとにビルドしたものを使うため、
+// 対応しているバージョンの場合のみ prebuilt 名を決定できる。
 fn detect_linux_distro() -> String {
     if let Ok(content) = fs::read_to_string("/etc/os-release") {
         for line in content.lines() {
             if let Some(version) = line.strip_prefix("VERSION_ID=") {
                 let version = version.trim_matches('"');
-                if version == "24.04" {
+                if matches!(version, "24.04" | "26.04") {
                     return format!("ubuntu-{version}");
                 }
             }
         }
     }
     panic!(
-        "unsupported Linux distribution: only Ubuntu 24.04 is supported. \
+        "unsupported Linux distribution: only Ubuntu 24.04 and 26.04 are supported. \
          set LIBAVM_TARGET environment variable to specify the target explicitly"
     );
 }

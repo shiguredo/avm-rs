@@ -42,6 +42,7 @@ jobs:
       matrix:
         include:
           - os: ubuntu-24.04
+          - os: ubuntu-26.04
           - os: macos-26
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30

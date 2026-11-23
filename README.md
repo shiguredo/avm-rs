@@ -52,6 +52,7 @@ libavm prebuilt または AVM ソースからの libavm ビルドが成功する
 | OS | アーキテクチャ | libavm prebuilt 名の例 |
 |---|---|---|
 | Ubuntu 24.04 | x86_64 | `ubuntu-24.04_x86_64` |
+| Ubuntu 26.04 | x86_64 | `ubuntu-26.04_x86_64` |
 | macOS 26 | arm64 | `macos_arm64` |
 
 ### AVM ソースから libavm をビルドする場合の追加要件
