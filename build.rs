@@ -5,7 +5,7 @@ use std::{
     process::Command,
 };
 
-// 依存ライブラリの名前（git clone 先ディレクトリ名および Cargo.toml の external-dependencies キー）
+// 依存ライブラリの名前（git リポジトリの取得先ディレクトリ名および Cargo.toml の external-dependencies キー）
 const LIB_NAME: &str = "avm";
 // rustc に渡すリンク名（Unix: libavm.a → -lavm）
 const LINK_NAME: &str = "avm";
@@ -82,15 +82,15 @@ fn main() {
     let output_bindings_path = out_dir.join("bindings.rs");
 
     // 各種メタデータを書き込む
-    let (git_url, version) = get_git_url_and_version();
+    let (git_url, git_ref) = get_git_url_and_ref();
     fs::write(
         output_metadata_path,
         format!(
             concat!(
                 "pub const BUILD_METADATA_REPOSITORY: &str={:?};\n",
-                "pub const BUILD_METADATA_VERSION: &str={:?};\n",
+                "pub const BUILD_METADATA_REF: &str={:?};\n",
             ),
-            git_url, version
+            git_url, git_ref
         ),
     )
     .expect("failed to write metadata file");
@@ -330,7 +330,7 @@ fn build_from_source(out_dir: &Path, output_bindings_path: &Path) -> PathBuf {
     fs::create_dir(&out_build_dir).expect("failed to create build directory");
 
     // 依存ライブラリのリポジトリを取得する
-    git_clone_external_lib(&out_build_dir);
+    fetch_external_lib(&out_build_dir);
 
     // CMAKE 環境変数を設定
     shiguredo_cmake::set_cmake_env();
@@ -914,30 +914,71 @@ fn detect_linux_distro() -> String {
     );
 }
 
-// 外部ライブラリのリポジトリを git clone する
-fn git_clone_external_lib(build_dir: &Path) {
-    let (git_url, version) = get_git_url_and_version();
+// 外部ライブラリのリポジトリを指定した ref で取得する
+//
+// ref にはタグ・ブランチ・コミットハッシュのいずれかを指定できる。
+// コミットハッシュは `git clone --branch` では指定できないが、GitHub は
+// コミットハッシュを指定した shallow fetch に対応しているため、
+// 空のリポジトリを作成してから指定 ref を shallow fetch し、FETCH_HEAD を checkout する。
+//
+// コミットハッシュを shallow fetch した場合はタグが取得されず、AVM の CMake が
+// `git describe --tags` でバージョンを決定できない。この場合 AVM は CHANGELOG から
+// バージョンを決定するため、ビルド自体は問題なく行える。
+fn fetch_external_lib(build_dir: &Path) {
+    let (git_url, git_ref) = get_git_url_and_ref();
+    let repo_dir = build_dir.join(LIB_NAME);
+
+    // リポジトリを初期化する
     let success = Command::new("git")
-        .arg("clone")
-        .arg("--depth")
-        .arg("1")
-        .arg("--branch")
-        .arg(version)
-        .arg(git_url)
-        .current_dir(build_dir)
+        .args(["init", "--quiet"])
+        .arg(&repo_dir)
         .status()
         .is_ok_and(|status| status.success());
     if !success {
-        panic!("failed to clone {LIB_NAME} repository");
+        panic!("failed to initialize {LIB_NAME} repository");
+    }
+
+    // origin を設定する
+    let success = Command::new("git")
+        .args(["remote", "add", "origin"])
+        .arg(&git_url)
+        .current_dir(&repo_dir)
+        .status()
+        .is_ok_and(|status| status.success());
+    if !success {
+        panic!("failed to add {git_url} as origin of {LIB_NAME} repository");
+    }
+
+    // 指定 ref を shallow fetch する
+    let success = Command::new("git")
+        .args(["fetch", "--depth", "1", "origin"])
+        .arg(&git_ref)
+        .current_dir(&repo_dir)
+        .status()
+        .is_ok_and(|status| status.success());
+    if !success {
+        panic!("failed to fetch ref {git_ref} from {LIB_NAME} repository");
+    }
+
+    // FETCH_HEAD を checkout する
+    let success = Command::new("git")
+        .args(["checkout", "--quiet", "--detach", "FETCH_HEAD"])
+        .current_dir(&repo_dir)
+        .status()
+        .is_ok_and(|status| status.success());
+    if !success {
+        panic!("failed to checkout ref {git_ref} in {LIB_NAME} repository");
     }
 }
 
-// Cargo.toml から依存ライブラリの Git URL とバージョンタグを取得する
-fn get_git_url_and_version() -> (String, String) {
+// Cargo.toml から依存ライブラリの Git URL と ref を取得する
+//
+// ref にはタグ・ブランチ・コミットハッシュのいずれかが指定される想定。
+fn get_git_url_and_ref() -> (String, String) {
     let cargo_toml = shiguredo_toml::Value::Table(
         shiguredo_toml::from_str(include_str!("Cargo.toml")).expect("failed to parse Cargo.toml"),
     );
-    if let Some((Some(git_url), Some(version))) = cargo_toml
+    if let Some((Some(git_url), Some(git_ref))) = cargo_toml
         .get("package")
         .and_then(|v| v.get("metadata"))
         .and_then(|v| v.get("external-dependencies"))
@@ -945,14 +986,14 @@ fn get_git_url_and_version() -> (String, String) {
         .map(|v| {
             (
                 v.get("url").and_then(|s| s.as_str()),
-                v.get("version").and_then(|s| s.as_str()),
+                v.get("ref").and_then(|s| s.as_str()),
             )
         })
     {
-        (git_url.to_string(), version.to_string())
+        (git_url.to_string(), git_ref.to_string())
     } else {
         panic!(
-            "Cargo.toml does not contain a valid [package.metadata.external-dependencies.{LIB_NAME}] table"
+            "Cargo.toml does not contain a valid [package.metadata.external-dependencies.{LIB_NAME}] table with url and ref"
         );
     }
 }
