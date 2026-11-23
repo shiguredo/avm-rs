@@ -158,10 +158,7 @@ fn main() {
 
 // source-build feature が有効でなければ prebuilt を使う
 fn should_use_prebuilt() -> bool {
-    if env::var("CARGO_FEATURE_SOURCE_BUILD").is_ok() {
-        return false;
-    }
-    true
+    env::var("CARGO_FEATURE_SOURCE_BUILD").is_err()
 }
 
 // prebuilt バイナリをダウンロードして展開する
