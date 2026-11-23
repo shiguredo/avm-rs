@@ -284,11 +284,11 @@ AVM v1.0.0 時点の libavm が文書化している usage は `AVM_USAGE_GOOD_Q
 
 ### ビルドメタデータ
 
-ビルドに使用した AVM のリポジトリとバージョン（libavm のソースタグ）:
+ビルドに使用した AVM のリポジトリと ref（libavm のソース ref）:
 
 ```rust
 println!("repository: {}", shiguredo_avm::BUILD_REPOSITORY);
-println!("version: {}", shiguredo_avm::BUILD_VERSION);
+println!("ref: {}", shiguredo_avm::BUILD_REF);
 ```
 
 ## テスト
